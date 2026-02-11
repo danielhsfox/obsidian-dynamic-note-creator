@@ -1,0 +1,26 @@
+{
+	"name": "obsidian-dynamic-note-creator",
+	"version": "1.0.0",
+	"description": "Interactive search block with multiple note creation buttons for Obsidian",
+	"main": "main.js",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "node esbuild.config.mjs production",
+		"version": "node version-bump.mjs && git add manifest.json versions.json"
+	},
+	"keywords": [
+		"obsidian",
+		"obsidian-plugin",
+		"note-creation",
+		"search",
+		"templates"
+	],
+	"author": "danielhsfox",
+	"license": "MIT",   
+	"devDependencies": {
+		"@types/node": "^16.11.6",
+		"obsidian": "latest",
+		"tslib": "2.3.1",
+		"typescript": "^4.7.4"
+	}
+}

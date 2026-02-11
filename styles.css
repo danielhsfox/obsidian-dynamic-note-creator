@@ -1,0 +1,291 @@
+/* Contenedor principal */
+.dynamic-note-creator-wrapper {
+    font-family: var(--font-family);
+    margin: 1em 0;
+    padding: 1em;
+    background: var(--background-primary);
+    border-radius: 8px;
+    border: 1px solid var(--background-modifier-border);
+}
+
+/* Fila superior con título y botones - IGUAL AL ANTERIOR */
+.dynamic-note-creator-top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.dynamic-note-creator-top-row label {
+    font-weight: 600;
+    color: var(--text-normal);
+    margin: 0;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+/* Contenedor para múltiples botones - ALINEADO A LA DERECHA */
+.dynamic-note-creator-buttons-container {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+/* Botones de agregar nota - IDÉNTICOS AL ANTERIOR */
+.dynamic-note-creator-button {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    white-space: nowrap;
+    min-width: fit-content;
+}
+
+.dynamic-note-creator-button:hover {
+    background: var(--interactive-accent-hover);
+}
+
+/* Input de búsqueda - IGUAL AL ANTERIOR */
+.dynamic-note-creator-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background: var(--background-primary);
+    color: var(--text-normal);
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+.dynamic-note-creator-input:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
+    box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+}
+
+/* Lista de resultados - IGUAL AL ANTERIOR */
+.dynamic-note-creator-list {
+    list-style: none;
+    padding: 0;
+    margin: 10px 0 0 0;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+/* Elementos de la lista - IGUAL AL ANTERIOR */
+.dynamic-note-creator-item {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.dynamic-note-creator-item:last-child {
+    border-bottom: none;
+}
+
+/* Enlaces - IGUAL AL ANTERIOR */
+.dynamic-note-creator-link {
+    color: var(--text-accent);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.dynamic-note-creator-link:hover {
+    text-decoration: underline;
+    color: var(--text-accent-hover);
+}
+
+/* Preview - IGUAL AL ANTERIOR */
+.dynamic-note-creator-preview {
+    margin-left: 16px;
+    font-size: 13px;
+    opacity: 0.8;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.dynamic-note-creator-preview strong {
+    color: var(--text-normal);
+    font-weight: bold;
+}
+
+/* Mensaje vacío - IGUAL AL ANTERIOR */
+.dynamic-note-creator-empty {
+    text-align: center;
+    padding: 20px;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Modal - IGUAL AL ANTERIOR */
+.dynamic-note-creator-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.dynamic-note-creator-modal-content {
+    background: var(--background-primary);
+    padding: 20px;
+    border-radius: 8px;
+    min-width: 300px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.dynamic-note-creator-modal-input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+.dynamic-note-creator-modal-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.dynamic-note-creator-modal-cancel,
+.dynamic-note-creator-modal-create {
+    padding: 8px 16px;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.dynamic-note-creator-modal-cancel {
+    background: var(--background-modifier-border);
+    color: var(--text-normal);
+}
+
+.dynamic-note-creator-modal-create {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+
+.dynamic-note-creator-modal-cancel:hover {
+    background: var(--background-modifier-border-hover);
+}
+
+.dynamic-note-creator-modal-create:hover {
+    background: var(--interactive-accent-hover);
+}
+
+/* Contador de resultados - IGUAL AL ANTERIOR */
+.dynamic-note-creator-counter {
+    margin-top: 8px;
+    font-size: 0.85em;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Settings panel */
+.dynamic-note-creator-item-container {
+    margin-bottom: 20px;
+    padding: 15px;
+    background: var(--background-secondary);
+    border-radius: 8px;
+    border: 1px solid var(--background-modifier-border);
+}
+
+.dynamic-note-creator-add-button {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 20px;
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.dynamic-note-creator-add-button:hover {
+    background: var(--interactive-accent-hover);
+}
+
+.dynamic-note-creator-remove-button {
+    padding: 6px 12px;
+    background: var(--background-modifier-border);
+    color: var(--text-normal);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    margin-top: 10px;
+}
+
+.dynamic-note-creator-remove-button:hover {
+    background: var(--background-modifier-border-hover);
+}
+
+.dynamic-note-creator-example {
+    margin: 15px 0;
+    padding: 15px;
+    background: var(--background-secondary);
+    border-radius: 8px;
+    border: 1px solid var(--background-modifier-border);
+}
+
+.dynamic-note-creator-example pre {
+    margin: 10px 0 0 0;
+    padding: 10px;
+    background: var(--background-primary);
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 12px;
+}
+
+.dynamic-note-creator-example code {
+    font-family: var(--font-monospace);
+    color: var(--text-muted);
+}
+
+/* Animaciones */
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.6; }
+    100% { opacity: 1; }
+}
+
+.dynamic-note-creator-item-updating {
+    animation: pulse 1s ease-in-out;
+}
+
+/* Estado de carga */
+.dynamic-note-creator-loading {
+    text-align: center;
+    padding: 20px;
+    color: var(--text-muted);
+}
+
+.dynamic-note-creator-loading::after {
+    content: '...';
+    animation: dots 1.5s steps(4, end) infinite;
+}
+
+@keyframes dots {
+    0%, 20% { content: ''; }
+    40% { content: '.'; }
+    60% { content: '..'; }
+    80%, 100% { content: '...'; }
+}

@@ -1,0 +1,10 @@
+{
+	"id": "dynamic-note-creator",
+	"name": "Dynamic Note Creator",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "Interactive search block with multiple note creation buttons for Obsidian",
+	"author": "danielhsfox",
+	"authorUrl": "https://github.com/danielhsfox",
+	"isDesktopOnly": false
+}
