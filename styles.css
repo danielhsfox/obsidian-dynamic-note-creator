@@ -94,7 +94,7 @@
     font-weight: 600;
     font-size: 14px;
     cursor: pointer;
-    display: block;
+    display: inline;
     margin-bottom: 4px;
 }
 

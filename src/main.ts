@@ -176,11 +176,10 @@ export default class DynamicNoteCreator extends Plugin {
 				buttonsContainer.appendChild(button);
 			});
 		}
+		
 		rightContainer.appendChild(buttonsContainer);
 		topRow.appendChild(label);
-		topRow.appendChild(rightContainer); // Ahora esto contiene los botones alineados a la derecha
-		
-		topRow.appendChild(buttonsContainer);
+		topRow.appendChild(rightContainer);
 		
 		// Input de búsqueda
 		const input = document.createElement('input');
@@ -370,10 +369,15 @@ private addNoteToList(file: any, list: HTMLUListElement, filter: string, config:
 		nativeLink.appendChild(backlinkIndicator);
 	}
 	
+	// Prevenir la propagación del evento para que Obsidian no lo procese dos veces
 	nativeLink.addEventListener('click', (e) => {
-		const openInNewPane = e.ctrlKey || e.metaKey || e.shiftKey;
+		e.preventDefault();
+		e.stopPropagation();
+		e.stopImmediatePropagation();
+		
+		const openInNewPane = e.ctrlKey || e.metaKey || e.shiftKey || e.altKey;
 		this.app.workspace.openLinkText(file.path, '', openInNewPane);
-	});
+	}, { capture: true, once: false }); // Usar capture para interceptar antes que Obsidian
 	
 	linkContainer.appendChild(nativeLink);
 	item.appendChild(linkContainer);
