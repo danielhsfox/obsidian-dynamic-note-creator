@@ -132,196 +132,321 @@ export default class DynamicNoteCreator extends Plugin {
 			.replace(/[\u0300-\u036f]/g, '');
 	}
 
-	async renderDynamicSearch(source: string, container: HTMLElement, ctx: any) {
-		container.empty();
-		
-		const config = this.parseConfig(source);
-		
-		const wrapper = document.createElement('div');
-		wrapper.className = 'dynamic-note-creator-wrapper';
-		
-		// Fila superior con título
-		const topRow = document.createElement('div');
-		topRow.className = 'dynamic-note-creator-top-row';
-		
-		const label = document.createElement('label');
-		label.textContent = config.title || this.settings.title;
-		
-		// Contenedor para label + botones
-		const rightContainer = document.createElement('div');
-		rightContainer.style.display = 'flex';
-		rightContainer.style.gap = '10px';
-		rightContainer.style.alignItems = 'center';
-
-		// Contenedor para múltiples botones
-		const buttonsContainer = document.createElement('div');
-		buttonsContainer.className = 'dynamic-note-creator-buttons-container';
-		
-		// Crear botones para cada configuración
-		if (config.configItems && config.configItems.length > 0) {
-			config.configItems.forEach((item, index) => {
-				const button = document.createElement('button');
-				button.textContent = item.nameButton;
-				button.className = 'dynamic-note-creator-button';
-				button.style.color = item.colorButton;
-				button.style.backgroundColor = item.backgroundButton;
-				button.dataset.index = index.toString();
-				
-				button.addEventListener('click', () => {
-					this.showCreateNotePopup(item, config, () => {
-						performSearch(currentSearchText);
-					});
+async renderDynamicSearch(source: string, container: HTMLElement, ctx: any) {
+	container.empty();
+	
+	const config = this.parseConfig(source);
+	
+	const wrapper = document.createElement('div');
+	wrapper.className = 'dynamic-note-creator-wrapper';
+	
+	// Fila superior con título
+	const topRow = document.createElement('div');
+	topRow.className = 'dynamic-note-creator-top-row';
+	
+	const label = document.createElement('label');
+	label.textContent = config.title || this.settings.title;
+	
+	// Contenedor para label + botones
+	const rightContainer = document.createElement('div');
+	rightContainer.className = 'dynamic-note-creator-right-container';
+	
+	// Contenedor para múltiples botones
+	const buttonsContainer = document.createElement('div');
+	buttonsContainer.className = 'dynamic-note-creator-buttons-container';
+	
+	// Crear botones para cada configuración
+	if (config.configItems && config.configItems.length > 0) {
+		config.configItems.forEach((item, index) => {
+			const button = document.createElement('button');
+			button.textContent = item.nameButton;
+			button.className = 'dynamic-note-creator-button';
+			button.style.color = item.colorButton;
+			button.style.backgroundColor = item.backgroundButton;
+			button.dataset.index = index.toString();
+			
+			button.addEventListener('click', () => {
+				this.showCreateNotePopup(item, config, () => {
+					performSearch(currentSearchText, selectedEmoji);
 				});
-				
-				buttonsContainer.appendChild(button);
 			});
-		}
-		
-		rightContainer.appendChild(buttonsContainer);
-		topRow.appendChild(label);
-		topRow.appendChild(rightContainer);
-		
-		// Input de búsqueda
-		const input = document.createElement('input');
-		input.type = 'text';
-		input.placeholder = 'Search notes...';
-		input.className = 'dynamic-note-creator-input';
-		
-		// Contador de resultados
-		const resultsCounter = document.createElement('div');
-		resultsCounter.className = 'dynamic-note-creator-counter';
-		
-		// Lista de resultados
-		const list = document.createElement('ul');
-		list.className = 'dynamic-note-creator-list';
-		
-		wrapper.appendChild(topRow);
-		wrapper.appendChild(input);
-		wrapper.appendChild(resultsCounter);
-		wrapper.appendChild(list);
-		container.appendChild(wrapper);
-		
-		const currentFile = this.app.workspace.getActiveFile();
-		const currentPath = currentFile ? currentFile.path : '';
-		
-		let currentSearchText = '';
-		let searchTimeout: NodeJS.Timeout | null = null;
-		
-const performSearch = async (searchText: string) => {
-	currentSearchText = searchText;
+			
+			buttonsContainer.appendChild(button);
+		});
+	}
 	
-	list.innerHTML = '';
-	resultsCounter.textContent = 'Searching...';
+	rightContainer.appendChild(buttonsContainer);
+	topRow.appendChild(label);
+	topRow.appendChild(rightContainer);
 	
-	const filter = this.normalizeText(searchText.trim());
-	const files = this.app.vault.getMarkdownFiles();
+	// Fila de búsqueda con input y selector
+	const searchRow = document.createElement('div');
+	searchRow.className = 'dynamic-note-creator-search-row';
 	
-	let results: SearchResult[] = [];
+	// Input de búsqueda
+	const input = document.createElement('input');
+	input.type = 'text';
+	input.placeholder = 'Search notes...';
+	input.className = 'dynamic-note-creator-input';
 	
-	if (filter) {
-		// Búsqueda con texto
+	// Selector de emojis
+	const emojiSelect = document.createElement('select');
+	emojiSelect.className = 'dynamic-note-creator-emoji-select';
+	
+	searchRow.appendChild(input);
+	searchRow.appendChild(emojiSelect);
+	
+	// Contador de resultados
+	const resultsCounter = document.createElement('div');
+	resultsCounter.className = 'dynamic-note-creator-counter';
+	
+	// Lista de resultados
+	const list = document.createElement('ul');
+	list.className = 'dynamic-note-creator-list';
+	
+	wrapper.appendChild(topRow);
+	wrapper.appendChild(searchRow);
+	wrapper.appendChild(resultsCounter);
+	wrapper.appendChild(list);
+	container.appendChild(wrapper);
+	
+	const currentFile = this.app.workspace.getActiveFile();
+	const currentPath = currentFile ? currentFile.path : '';
+	
+	let currentSearchText = '';
+	let selectedEmoji = '';
+	let searchTimeout: NodeJS.Timeout | null = null;
+	
+	// Función para extraer emoji del nombre del archivo
+	const extractEmojiFromFilename = (filename: string): string | null => {
+		const emojiRegex = /^(\p{Emoji_Presentation}|\p{Emoji}\uFE0F?)\s/u;
+		const match = filename.match(emojiRegex);
+		return match ? match[1] : null;
+	};
+	
+	// Función para cargar todos los emojis disponibles inicialmente
+	const loadAllEmojis = async () => {
 		const allPaths = config.configItems?.map(item => item.path) || [this.settings.configItems[0]?.path || ''];
+		const files = this.app.vault.getMarkdownFiles();
+		const emojis = new Set<string>();
 		
 		for (const file of files) {
-			try {
-				// Verificar si el archivo está en alguno de los paths configurados
-				const isInPath = allPaths.some(path => file.path.startsWith(path));
-				const isNotCurrent = file.path !== currentPath;
-				
-				if (isInPath && isNotCurrent) {
-					const content = await this.app.vault.cachedRead(file);
-					const contentNormalized = this.normalizeText(content);
-					const fileNameNormalized = this.normalizeText(file.basename);
+			const isInPath = allPaths.some(path => file.path.startsWith(path));
+			const isNotCurrent = file.path !== currentPath;
+			
+			if (isInPath && isNotCurrent) {
+				const emoji = extractEmojiFromFilename(file.basename);
+				if (emoji) {
+					emojis.add(emoji);
+				}
+			}
+		}
+		
+		// Limpiar selector
+		emojiSelect.innerHTML = '';
+		
+		// Opción por defecto
+		const defaultOption = document.createElement('option');
+		defaultOption.value = '';
+		defaultOption.textContent = '🎯 All notes';
+		emojiSelect.appendChild(defaultOption);
+		
+		// Añadir todos los emojis encontrados
+		const sortedEmojis = Array.from(emojis).sort();
+		sortedEmojis.forEach(emoji => {
+			const option = document.createElement('option');
+			option.value = emoji;
+			option.textContent = emoji;
+			emojiSelect.appendChild(option);
+		});
+		
+		// Restaurar selección si el emoji aún existe
+		if (selectedEmoji && emojis.has(selectedEmoji)) {
+			emojiSelect.value = selectedEmoji;
+		} else {
+			selectedEmoji = '';
+			emojiSelect.value = '';
+		}
+	};
+	
+	const performSearch = async (searchText: string, emojiFilter: string = '') => {
+		currentSearchText = searchText;
+		selectedEmoji = emojiFilter;
+		
+		list.innerHTML = '';
+		resultsCounter.textContent = 'Searching...';
+		
+		const filter = this.normalizeText(searchText.trim());
+		const files = this.app.vault.getMarkdownFiles();
+		
+		let results: SearchResult[] = [];
+		
+		// Obtener todos los paths configurados
+		const allPaths = config.configItems?.map(item => item.path) || [this.settings.configItems[0]?.path || ''];
+		
+		// CASO 1: Hay texto de búsqueda
+		if (filter) {
+			// Búsqueda con texto
+			for (const file of files) {
+				try {
+					// Verificar si el archivo está en alguno de los paths configurados
+					const isInPath = allPaths.some(path => file.path.startsWith(path));
+					const isNotCurrent = file.path !== currentPath;
 					
-					const matchesName = fileNameNormalized.includes(filter);
-					const matchesContent = contentNormalized.includes(filter);
+					// Verificar filtro de emoji
+					const fileEmoji = extractEmojiFromFilename(file.basename);
+					const matchesEmoji = !emojiFilter || fileEmoji === emojiFilter;
 					
-					if (matchesName || matchesContent) {
+					if (isInPath && isNotCurrent && matchesEmoji) {
+						const content = await this.app.vault.cachedRead(file);
+						const contentNormalized = this.normalizeText(content);
+						const fileNameNormalized = this.normalizeText(file.basename);
+						
+						const matchesName = fileNameNormalized.includes(filter);
+						const matchesContent = contentNormalized.includes(filter);
+						
+						if (matchesName || matchesContent) {
+							results.push({
+								file: file,
+								content: content,
+								matchesName: matchesName,
+								matchesContent: matchesContent,
+								isBacklink: false
+							});
+						}
+					}
+				} catch (error) {
+					console.error('Error reading file:', file.path, error);
+				}
+			}
+		} 
+		// CASO 2: No hay texto de búsqueda pero HAY filtro de emoji
+		else if (emojiFilter) {
+			// Mostrar TODAS las notas con ese emoji
+			const currentTitle = this.app.workspace.getActiveFile()?.basename || '';
+			
+			for (const file of files) {
+				try {
+					const isInPath = allPaths.some(path => file.path.startsWith(path));
+					const isNotCurrent = file.path !== currentPath;
+					
+					// Verificar filtro de emoji
+					const fileEmoji = extractEmojiFromFilename(file.basename);
+					const matchesEmoji = fileEmoji === emojiFilter;
+					
+					if (isInPath && isNotCurrent && matchesEmoji) {
+						// Leer contenido para posibles previews
+						const content = await this.app.vault.cachedRead(file);
+						
 						results.push({
 							file: file,
 							content: content,
-							matchesName: matchesName,
-							matchesContent: matchesContent,
+							matchesName: true, // Consideramos que coincide por el emoji
+							matchesContent: false,
 							isBacklink: false
 						});
 					}
+				} catch (error) {
+					console.error('Error reading file:', file.path, error);
 				}
-			} catch (error) {
-				console.error('Error reading file:', file.path, error);
 			}
 		}
-	} else {
-		// Búsqueda vacía - mostrar notas que enlazan a la actual
-		const allPaths = config.configItems?.map(item => item.path) || [this.settings.configItems[0]?.path || ''];
-		const currentTitle = this.app.workspace.getActiveFile()?.basename || '';
-		
-		for (const file of files) {
-			try {
-				const isInPath = allPaths.some(path => file.path.startsWith(path));
-				const isNotCurrent = file.path !== currentPath;
-				
-				if (isInPath && isNotCurrent) {
-					const content = await this.app.vault.cachedRead(file);
-					const hasLink = this.containsLinkToNote(content, currentTitle);
-					
-					if (hasLink) {
-						results.push({
-							file: file,
-							content: content,
-							matchesName: false,
-							matchesContent: false,
-							isBacklink: true
-						});
-					}
-				}
-			} catch (error) {
-				console.error('Error reading file:', file.path, error);
-			}
-		}
-	}
-	
-	this.renderResults(results, list, filter, config);
-	
-	// Actualizar contador
-	if (results.length === 0) {
-		if (filter) {
-			resultsCounter.textContent = 'No matches found';
-		} else {
-			resultsCounter.textContent = 'Start typing to search';
-		}
-	} else {
-		resultsCounter.textContent = `${results.length} ${results.length === 1 ? 'result' : 'results'}`;
-	}
-};
-		
-		input.addEventListener('input', (e) => {
-			const target = e.target as HTMLInputElement;
-			if (searchTimeout) {
-				clearTimeout(searchTimeout);
-			}
+		// CASO 3: No hay texto ni emoji - mostrar backlinks
+		else {
+			// Búsqueda vacía - mostrar notas que enlazan a la actual
+			const currentTitle = this.app.workspace.getActiveFile()?.basename || '';
 			
-			searchTimeout = setTimeout(() => {
-				performSearch(target.value);
-			}, 300);
+			for (const file of files) {
+				try {
+					const isInPath = allPaths.some(path => file.path.startsWith(path));
+					const isNotCurrent = file.path !== currentPath;
+					
+					if (isInPath && isNotCurrent) {
+						const content = await this.app.vault.cachedRead(file);
+						const hasLink = this.containsLinkToNote(content, currentTitle);
+						
+						if (hasLink) {
+							results.push({
+								file: file,
+								content: content,
+								matchesName: false,
+								matchesContent: false,
+								isBacklink: true
+							});
+						}
+					}
+				} catch (error) {
+					console.error('Error reading file:', file.path, error);
+				}
+			}
+		}
+		
+		// Ordenar resultados: primero los que coinciden en nombre, luego en contenido
+		results.sort((a, b) => {
+			if (a.matchesName && !b.matchesName) return -1;
+			if (!a.matchesName && b.matchesName) return 1;
+			return 0;
 		});
 		
-		const updateEventHandler = () => {
-			if (this.app.workspace.getActiveFile()?.path === currentPath) {
-				performSearch(currentSearchText);
+		this.renderResults(results, list, filter, config);
+		
+		// Actualizar contador con mensajes más descriptivos
+		if (results.length === 0) {
+			if (filter) {
+				resultsCounter.textContent = 'No matches found';
+			} else if (emojiFilter) {
+				resultsCounter.textContent = `No notes with emoji ${emojiFilter}`;
+			} else {
+				resultsCounter.textContent = 'Start typing to search';
 			}
-		};
+		} else {
+			if (emojiFilter && !filter) {
+				resultsCounter.textContent = `${results.length} ${results.length === 1 ? 'note' : 'notes'} with emoji ${emojiFilter}`;
+			} else {
+				resultsCounter.textContent = `${results.length} ${results.length === 1 ? 'result' : 'results'}`;
+			}
+		}
+	};
+	
+	input.addEventListener('input', (e) => {
+		const target = e.target as HTMLInputElement;
+		if (searchTimeout) {
+			clearTimeout(searchTimeout);
+		}
 		
-		this.registerEvent(this.app.vault.on('create', updateEventHandler));
-		this.registerEvent(this.app.vault.on('delete', updateEventHandler));
-		this.registerEvent(this.app.vault.on('rename', updateEventHandler));
-		this.registerEvent(this.app.vault.on('modify', updateEventHandler));
-		this.registerEvent(this.app.workspace.on('file-open', updateEventHandler));
-		
-		performSearch('');
-		
-		(wrapper as any)._searchFunction = performSearch;
-		(wrapper as any)._currentSearchText = currentSearchText;
-	}
+		searchTimeout = setTimeout(() => {
+			performSearch(target.value, emojiSelect.value);
+		}, 300);
+	});
+	
+	emojiSelect.addEventListener('change', (e) => {
+		const target = e.target as HTMLSelectElement;
+		performSearch(input.value, target.value);
+	});
+	
+	const updateEventHandler = async () => {
+		if (this.app.workspace.getActiveFile()?.path === currentPath) {
+			// Recargar emojis y mantener selección si es posible
+			await loadAllEmojis();
+			performSearch(currentSearchText, selectedEmoji);
+		}
+	};
+	
+	this.registerEvent(this.app.vault.on('create', updateEventHandler));
+	this.registerEvent(this.app.vault.on('delete', updateEventHandler));
+	this.registerEvent(this.app.vault.on('rename', updateEventHandler));
+	this.registerEvent(this.app.vault.on('modify', updateEventHandler));
+	this.registerEvent(this.app.workspace.on('file-open', updateEventHandler));
+	
+	// Cargar todos los emojis disponibles inicialmente
+	await loadAllEmojis();
+	// Realizar búsqueda inicial
+	performSearch('', '');
+	
+	(wrapper as any)._searchFunction = performSearch;
+	(wrapper as any)._currentSearchText = currentSearchText;
+	(wrapper as any)._selectedEmoji = selectedEmoji;
+}
 	
 private renderResults(results: SearchResult[], listElement: HTMLUListElement, filter: string, config: BlockConfig) {
 	listElement.innerHTML = '';

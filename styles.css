@@ -289,3 +289,42 @@
     60% { content: '..'; }
     80%, 100% { content: '...'; }
 }
+
+/*  */
+
+/* Fila de búsqueda con input y selector */
+.dynamic-note-creator-search-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+/* Selector de emojis */
+.dynamic-note-creator-emoji-select {
+    width: 120px;
+    padding: 5px;
+    border-radius: 4px;
+    border: 1px solid var(--background-modifier-border);
+    background-color: var(--background-primary);
+    color: var(--text-normal);
+    font-size: 14px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.dynamic-note-creator-emoji-select:hover {
+    border-color: var(--interactive-accent);
+}
+
+.dynamic-note-creator-emoji-select:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
+    box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+}
+
+.dynamic-note-creator-emoji-select option {
+    background-color: var(--background-primary);
+    color: var(--text-normal);
+    padding: 8px;
+}
