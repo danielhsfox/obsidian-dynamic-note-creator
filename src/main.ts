@@ -89,40 +89,43 @@ export default class DynamicNoteCreator extends Plugin {
 		await this.saveData(this.settings);
 	}
 
-	private insertDynamicSearchBlock(editor: Editor) {
-		const cursor = editor.getCursor();
-		
-		// Crear el contenido del bloque con múltiples configuraciones
-		const blockLines = ['```dynamicsearch', `title: ${this.settings.title}`];
-		
-		// Añadir cada configuración como lista separada por comas
-		if (this.settings.configItems.length > 0) {
-			blockLines.push(`path: ${this.settings.configItems.map(item => item.path).join(', ')}`);
-			blockLines.push(`nameButton: ${this.settings.configItems.map(item => item.nameButton).join(', ')}`);
-			blockLines.push(`colorButton: ${this.settings.configItems.map(item => item.colorButton).join(', ')}`);
-			blockLines.push(`backgroundButton: ${this.settings.configItems.map(item => item.backgroundButton).join(', ')}`);
-			blockLines.push(`emoji: ${this.settings.configItems.map(item => item.emoji || '').join(', ')}`);
-			blockLines.push(`pathTemplate: ${this.settings.configItems.map(item => item.pathTemplate).join(', ')}`);
+private insertDynamicSearchBlock(editor: Editor) {
+	const cursor = editor.getCursor();
+	
+	// Crear el contenido del bloque con el nuevo formato
+	const blockLines = ['```dynamicsearch', `title: ${this.settings.title}`];
+	
+	// Añadir cada configuración como bloque separado por '---'
+	this.settings.configItems.forEach(item => {
+		blockLines.push('---');
+		blockLines.push(`path: ${item.path}`);
+		blockLines.push(`nameButton: ${item.nameButton}`);
+		blockLines.push(`colorButton: ${item.colorButton}`);
+		blockLines.push(`backgroundButton: ${item.backgroundButton}`);
+		if (item.emoji) {
+			blockLines.push(`emoji: ${item.emoji}`);
 		}
-		
-		blockLines.push('```', '', '');
-		
-		const blockContent = blockLines.join('\n');
-		const totalLines = blockLines.length;
-		
-		editor.replaceRange(blockContent, cursor);
-		
-		// Calcular nueva posición del cursor
-		const newCursor = {
-			line: cursor.line + totalLines,
-			ch: 0
-		};
-		
-		editor.setCursor(newCursor);
-		editor.focus();
-		
-		new Notice('Dynamic Note Creator block inserted');
-	}
+		blockLines.push(`pathTemplate: ${item.pathTemplate}`);
+	});
+	
+	blockLines.push('```', '', '');
+	
+	const blockContent = blockLines.join('\n');
+	const totalLines = blockLines.length;
+	
+	editor.replaceRange(blockContent, cursor);
+	
+	// Calcular nueva posición del cursor
+	const newCursor = {
+		line: cursor.line + totalLines,
+		ch: 0
+	};
+	
+	editor.setCursor(newCursor);
+	editor.focus();
+	
+	new Notice('Dynamic Note Creator block inserted');
+}
 
 	normalizeText(text: string): string {
 		if (!text) return '';
@@ -226,7 +229,7 @@ async renderDynamicSearch(source: string, container: HTMLElement, ctx: any) {
 	
 	// Función para cargar todos los emojis disponibles inicialmente
 	const loadAllEmojis = async () => {
-		const allPaths = config.configItems?.map(item => item.path) || [this.settings.configItems[0]?.path || ''];
+		const allPaths = config.configItems?.map(item => item.path) || [];
 		const files = this.app.vault.getMarkdownFiles();
 		const emojis = new Set<string>();
 		
@@ -580,65 +583,76 @@ private parseConfig(source: string): BlockConfig {
 	const config: BlockConfig = {};
 	const lines = source.split('\n');
 	
+	let currentItem: Partial<PluginConfigItem> = {};
+	let processingItems = false;
+	
 	lines.forEach(line => {
-		const match = line.match(/^(\w+):\s*(.+)$/);
-		if (match) {
-			const key = match[1].trim() as keyof BlockConfig;
-			const value = match[2].trim();
-			
-			if (key === 'title') {
-				config[key] = value;
-			} else {
-				// Parsear listas separadas por comas
-				const items = value.split(',').map(item => item.trim()).filter(item => item);
-				
+		line = line.trim();
+		if (!line) return; // Ignorar líneas vacías
+		
+		// Detectar separador de items
+		if (line === '---') {
+			if (Object.keys(currentItem).length > 0) {
+				// Guardar item actual
 				if (!config.configItems) {
 					config.configItems = [];
 				}
-				
-				// Asegurar que haya suficiente espacio en el array
-				items.forEach((item, index) => {
-					if (!config.configItems![index]) {
-						config.configItems![index] = {
-							path: '',
-							nameButton: '',
-							colorButton: '',
-							backgroundButton: '',
-							pathTemplate: ''
-						};
-					}
-					
-					switch(key) {
-						case 'path':
-							config.configItems![index].path = item.endsWith('/') ? item : item + '/';
-							break;
-						case 'nameButton':
-							config.configItems![index].nameButton = item;
-							break;
-						case 'colorButton':
-							config.configItems![index].colorButton = item;
-							break;
-						case 'backgroundButton':
-							config.configItems![index].backgroundButton = item;
-							break;
-						case 'emoji':
-							// Solo guardar el emoji real, no "true"/"false"
-							if (item === 'true') {
-								config.configItems![index].emoji = '📝'; // Emoji por defecto
-							} else if (item === 'false') {
-								config.configItems![index].emoji = '';
-							} else {
-								config.configItems![index].emoji = item;
-							}
-							break;
-						case 'pathTemplate':
-							config.configItems![index].pathTemplate = item;
-							break;
-					}
-				});
+				config.configItems.push(currentItem as PluginConfigItem);
+				currentItem = {};
+			}
+			processingItems = true;
+			return;
+		}
+		
+		// Parsear key: value
+		const match = line.match(/^(\w+):\s*(.+)$/);
+		if (match) {
+			const key = match[1].trim();
+			const value = match[2].trim();
+			
+			if (!processingItems) {
+				// Propiedades globales (title)
+				if (key === 'title') {
+					config[key] = value;
+				}
+			} else {
+				// Propiedades de items
+				switch(key) {
+					case 'path':
+						currentItem.path = value.endsWith('/') ? value : value + '/';
+						break;
+					case 'nameButton':
+						currentItem.nameButton = value;
+						break;
+					case 'colorButton':
+						currentItem.colorButton = value;
+						break;
+					case 'backgroundButton':
+						currentItem.backgroundButton = value;
+						break;
+					case 'emoji':
+						currentItem.emoji = value;
+						break;
+					case 'pathTemplate':
+						currentItem.pathTemplate = value;
+						break;
+				}
 			}
 		}
 	});
+	
+	// Guardar el último item si existe
+	if (Object.keys(currentItem).length > 0) {
+		if (!config.configItems) {
+			config.configItems = [];
+		}
+		config.configItems.push(currentItem as PluginConfigItem);
+	}
+	
+	// Si no hay items configurados, usar los de settings
+	if (!config.configItems || config.configItems.length === 0) {
+		config.configItems = this.settings.configItems;
+	}
 	
 	return config;
 }
@@ -663,7 +677,7 @@ public async createNote(noteName: string, configItem: PluginConfigItem, blockCon
 	let templateApplied = false;
 	let templateHasTemplaterCode = false;
 	
-	// Aplicar plantilla
+	// Aplicar plantilla (código existente...)
 	const templatePath = configItem.pathTemplate;
 	
 	if (templatePath && templatePath.trim()) {
@@ -695,12 +709,9 @@ public async createNote(noteName: string, configItem: PluginConfigItem, blockCon
 				const templateContent = await this.app.vault.read(templateFile);
 				console.log('Template content length:', templateContent.length);
 				
-				// Verificar si el template tiene contenido
 				if (templateContent.trim() !== '') {
 					templateApplied = true;
 					content = templateContent;
-					
-					// Verificar si el template tiene código Templater
 					templateHasTemplaterCode = templateContent.includes('<%') && 
 											templateContent.includes('%>');
 					
@@ -722,7 +733,6 @@ public async createNote(noteName: string, configItem: PluginConfigItem, blockCon
 		console.log('No template configured - creating empty file');
 	}
 	
-	// Si no hay template o está vacío, crear archivo vacío
 	if (!templateApplied) {
 		content = '';
 	}
@@ -744,27 +754,24 @@ public async createNote(noteName: string, configItem: PluginConfigItem, blockCon
 		
 		console.log('Creating file:', fullPath);
 		
-		// 1. CREAR EL ARCHIVO CON CONTENIDO DEL TEMPLATE (o vacío)
+		// Crear el archivo
 		const file = await this.app.vault.create(fullPath, content);
 		console.log('File created successfully!');
 		
-		// 2. PROCESAR CON TEMPLATER SOLO SI EL TEMPLATE TIENE CÓDIGO TEMPLATER
+		// Procesar con Templater (código existente...)
 		const templaterPlugin = (this.app as any).plugins.plugins['templater-obsidian'];
 		
 		if (templateApplied && templateHasTemplaterCode && templaterPlugin && templaterPlugin.templater) {
 			console.log('Processing with Templater...');
 			
 			try {
-				// Crear contexto para Templater
 				const templaterContext = {
 					template_file: file,
 					target_file: file,
 					run_mode: 4,
 					creation_date: new Date(),
-					// Variables para el template
 					title: noteName,
 					noteName: noteName,
-					// Para compatibilidad con tp
 					tp: {
 						file: {
 							title: noteName,
@@ -779,7 +786,6 @@ public async createNote(noteName: string, configItem: PluginConfigItem, blockCon
 					}
 				};
 				
-				// Procesar con Templater
 				if (typeof templaterPlugin.templater.parse_template_into_file === 'function') {
 					await templaterPlugin.templater.parse_template_into_file(templaterContext, file);
 				} else if (typeof templaterPlugin.templater.parse_and_save_to_file === 'function') {
@@ -811,12 +817,12 @@ public async createNote(noteName: string, configItem: PluginConfigItem, blockCon
 		
 		console.log('Final content:', (await this.app.vault.read(file)).substring(0, 500));
 		
-		// 3. ABRIR LA NUEVA NOTA
-		// 3. ABRIR LA NUEVA NOTA Y POSICIONAR CURSOR
-		const leaf = this.app.workspace.getLeaf(true);
+		// 🔥 CAMBIO IMPORTANTE AQUÍ 🔥
+		// Usar 'tab' para comportamiento consistente en todas las plataformas
+		const leaf = this.app.workspace.getLeaf('tab');
 		await leaf.openFile(file);
 		
-		// Esperar a que el editor esté listo
+		// Posicionar cursor
 		setTimeout(() => {
 			this.positionCursorAtEnd(leaf);
 		}, 100);
