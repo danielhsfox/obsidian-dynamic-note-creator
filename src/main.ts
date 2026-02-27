@@ -50,8 +50,10 @@ interface SearchResult {
 }
 
 interface BlockConfig {
-	title?: string;
-	configItems?: PluginConfigItem[];
+    title?: string;
+    sortBy?: 'name' | 'date';  // Añadir
+    sortOrder?: 'asc' | 'desc'; // Añadir
+    configItems?: PluginConfigItem[];
 }
 
 export default class DynamicNoteCreator extends Plugin {
@@ -90,41 +92,48 @@ export default class DynamicNoteCreator extends Plugin {
 	}
 
 private insertDynamicSearchBlock(editor: Editor) {
-	const cursor = editor.getCursor();
-	
-	// Crear el contenido del bloque con el nuevo formato
-	const blockLines = ['```dynamicsearch', `title: ${this.settings.title}`];
-	
-	// Añadir cada configuración como bloque separado por '---'
-	this.settings.configItems.forEach(item => {
-		blockLines.push('---');
-		blockLines.push(`path: ${item.path}`);
-		blockLines.push(`nameButton: ${item.nameButton}`);
-		blockLines.push(`colorButton: ${item.colorButton}`);
-		blockLines.push(`backgroundButton: ${item.backgroundButton}`);
-		if (item.emoji) {
-			blockLines.push(`emoji: ${item.emoji}`);
-		}
-		blockLines.push(`pathTemplate: ${item.pathTemplate}`);
-	});
-	
-	blockLines.push('```', '', '');
-	
-	const blockContent = blockLines.join('\n');
-	const totalLines = blockLines.length;
-	
-	editor.replaceRange(blockContent, cursor);
-	
-	// Calcular nueva posición del cursor
-	const newCursor = {
-		line: cursor.line + totalLines,
-		ch: 0
-	};
-	
-	editor.setCursor(newCursor);
-	editor.focus();
-	
-	new Notice('Dynamic Note Creator block inserted');
+    const cursor = editor.getCursor();
+    
+    // Crear el contenido del bloque con el nuevo formato
+    const blockLines = [
+        '```dynamicsearch', 
+        `title: ${this.settings.title}`,
+        'sortBy: name',
+        'sortOrder: asc'
+    ];
+    
+    // Añadir cada configuración como bloque separado por '---'
+    this.settings.configItems.forEach(item => {
+        blockLines.push('---');
+        // Si el path está vacío, usar "current" como valor por defecto
+        const pathValue = item.path && item.path !== 'Notes/' ? item.path : 'current';
+        blockLines.push(`path: ${pathValue}`);
+        blockLines.push(`nameButton: ${item.nameButton}`);
+        blockLines.push(`colorButton: ${item.colorButton}`);
+        blockLines.push(`backgroundButton: ${item.backgroundButton}`);
+        if (item.emoji) {
+            blockLines.push(`emoji: ${item.emoji}`);
+        }
+        blockLines.push(`pathTemplate: ${item.pathTemplate}`);
+    });
+    
+    blockLines.push('```', '', '');
+    
+    const blockContent = blockLines.join('\n');
+    const totalLines = blockLines.length;
+    
+    editor.replaceRange(blockContent, cursor);
+    
+    // Calcular nueva posición del cursor
+    const newCursor = {
+        line: cursor.line + totalLines,
+        ch: 0
+    };
+    
+    editor.setCursor(newCursor);
+    editor.focus();
+    
+    new Notice('Dynamic Note Creator block inserted');
 }
 
 	normalizeText(text: string): string {
@@ -137,8 +146,15 @@ private insertDynamicSearchBlock(editor: Editor) {
 
 async renderDynamicSearch(source: string, container: HTMLElement, ctx: any) {
 	container.empty();
+
+	// Obtener la ruta del archivo que contiene el bloque
+    const currentFilePath = ctx.sourcePath;
+    console.log('Block source path:', currentFilePath);
 	
-	const config = this.parseConfig(source);
+	// Pasar el path al parseConfig
+    const config = this.parseConfig(source, currentFilePath);
+	console.log('Block path:', currentFilePath);
+console.log('Config items:', config.configItems);
 	
 	const wrapper = document.createElement('div');
 	wrapper.className = 'dynamic-note-creator-wrapper';
@@ -213,12 +229,13 @@ async renderDynamicSearch(source: string, container: HTMLElement, ctx: any) {
 	wrapper.appendChild(list);
 	container.appendChild(wrapper);
 	
-	const currentFile = this.app.workspace.getActiveFile();
-	const currentPath = currentFile ? currentFile.path : '';
-	
-	let currentSearchText = '';
-	let selectedEmoji = '';
-	let searchTimeout: NodeJS.Timeout | null = null;
+    const currentFile = this.app.workspace.getActiveFile();
+    const currentPath = currentFile ? currentFile.path : '';
+    const currentTitle = currentFile ? currentFile.basename : ''; // AÑADIR ESTA LÍNEA
+    
+    let currentSearchText = '';
+    let selectedEmoji = '';
+    let searchTimeout: NodeJS.Timeout | null = null;
 	
 	// Función para extraer emoji del nombre del archivo
 	const extractEmojiFromFilename = (filename: string): string | null => {
@@ -228,188 +245,214 @@ async renderDynamicSearch(source: string, container: HTMLElement, ctx: any) {
 	};
 	
 	// Función para cargar todos los emojis disponibles inicialmente
-	const loadAllEmojis = async () => {
-		const allPaths = config.configItems?.map(item => item.path) || [];
-		const files = this.app.vault.getMarkdownFiles();
-		const emojis = new Set<string>();
-		
-		for (const file of files) {
-			const isInPath = allPaths.some(path => file.path.startsWith(path));
-			const isNotCurrent = file.path !== currentPath;
-			
-			if (isInPath && isNotCurrent) {
-				const emoji = extractEmojiFromFilename(file.basename);
-				if (emoji) {
-					emojis.add(emoji);
-				}
-			}
-		}
-		
-		// Limpiar selector
-		emojiSelect.innerHTML = '';
-		
-		// Opción por defecto
-		const defaultOption = document.createElement('option');
-		defaultOption.value = '';
-		defaultOption.textContent = '🎯 All notes';
-		emojiSelect.appendChild(defaultOption);
-		
-		// Añadir todos los emojis encontrados
-		const sortedEmojis = Array.from(emojis).sort();
-		sortedEmojis.forEach(emoji => {
-			const option = document.createElement('option');
-			option.value = emoji;
-			option.textContent = emoji;
-			emojiSelect.appendChild(option);
-		});
-		
-		// Restaurar selección si el emoji aún existe
-		if (selectedEmoji && emojis.has(selectedEmoji)) {
-			emojiSelect.value = selectedEmoji;
-		} else {
-			selectedEmoji = '';
-			emojiSelect.value = '';
-		}
-	};
+const loadAllEmojis = async () => {
+    const allPaths = config.configItems
+        ?.filter(item => item && item.path !== undefined && item.path !== null)
+        .map(item => item.path) || [];
+    
+    console.log('Search paths:', allPaths);
+    
+    const files = this.app.vault.getMarkdownFiles();
+    const emojiCounts = new Map<string, number>();
+    
+    for (const file of files) {
+        // Si no hay paths definidos, incluir todos los archivos excepto el actual
+        const isInPath = allPaths.length === 0 || allPaths.some(path => file.path.startsWith(path));
+        const isNotCurrent = file.path !== currentPath;
+        
+        if (isInPath && isNotCurrent) {
+            const emoji = extractEmojiFromFilename(file.basename);
+            if (emoji) {
+                const currentCount = emojiCounts.get(emoji) || 0;
+                emojiCounts.set(emoji, currentCount + 1);
+            }
+        }
+    }
+    
+    // Limpiar selector
+    emojiSelect.innerHTML = '';
+    
+    // Opción por defecto
+    const totalNotes = Array.from(emojiCounts.values()).reduce((sum, count) => sum + count, 0);
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    // defaultOption.textContent = `🎯 All notes (${totalNotes})`;
+	defaultOption.textContent = `🎯 All notes`; // Quitamos el (${totalNotes})
+    emojiSelect.appendChild(defaultOption);
+    
+    // Añadir emojis con contadores
+    const sortedEmojis = Array.from(emojiCounts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    
+    sortedEmojis.forEach(([emoji, count]) => {
+        const option = document.createElement('option');
+        option.value = emoji;
+        option.textContent = `${emoji} (${count})`;
+        emojiSelect.appendChild(option);
+    });
+    
+    // Restaurar selección
+    if (selectedEmoji && emojiCounts.has(selectedEmoji)) {
+        emojiSelect.value = selectedEmoji;
+    } else {
+        selectedEmoji = '';
+        emojiSelect.value = '';
+    }
+};
 	
-	const performSearch = async (searchText: string, emojiFilter: string = '') => {
-		currentSearchText = searchText;
-		selectedEmoji = emojiFilter;
-		
-		list.innerHTML = '';
-		resultsCounter.textContent = 'Searching...';
-		
-		const filter = this.normalizeText(searchText.trim());
-		const files = this.app.vault.getMarkdownFiles();
-		
-		let results: SearchResult[] = [];
-		
-		// Obtener todos los paths configurados
-		const allPaths = config.configItems?.map(item => item.path) || [this.settings.configItems[0]?.path || ''];
-		
-		// CASO 1: Hay texto de búsqueda
-		if (filter) {
-			// Búsqueda con texto
-			for (const file of files) {
-				try {
-					// Verificar si el archivo está en alguno de los paths configurados
-					const isInPath = allPaths.some(path => file.path.startsWith(path));
-					const isNotCurrent = file.path !== currentPath;
-					
-					// Verificar filtro de emoji
-					const fileEmoji = extractEmojiFromFilename(file.basename);
-					const matchesEmoji = !emojiFilter || fileEmoji === emojiFilter;
-					
-					if (isInPath && isNotCurrent && matchesEmoji) {
-						const content = await this.app.vault.cachedRead(file);
-						const contentNormalized = this.normalizeText(content);
-						const fileNameNormalized = this.normalizeText(file.basename);
-						
-						const matchesName = fileNameNormalized.includes(filter);
-						const matchesContent = contentNormalized.includes(filter);
-						
-						if (matchesName || matchesContent) {
-							results.push({
-								file: file,
-								content: content,
-								matchesName: matchesName,
-								matchesContent: matchesContent,
-								isBacklink: false
-							});
-						}
-					}
-				} catch (error) {
-					console.error('Error reading file:', file.path, error);
-				}
-			}
-		} 
-		// CASO 2: No hay texto de búsqueda pero HAY filtro de emoji
-		else if (emojiFilter) {
-			// Mostrar TODAS las notas con ese emoji
-			const currentTitle = this.app.workspace.getActiveFile()?.basename || '';
-			
-			for (const file of files) {
-				try {
-					const isInPath = allPaths.some(path => file.path.startsWith(path));
-					const isNotCurrent = file.path !== currentPath;
-					
-					// Verificar filtro de emoji
-					const fileEmoji = extractEmojiFromFilename(file.basename);
-					const matchesEmoji = fileEmoji === emojiFilter;
-					
-					if (isInPath && isNotCurrent && matchesEmoji) {
-						// Leer contenido para posibles previews
-						const content = await this.app.vault.cachedRead(file);
-						
-						results.push({
-							file: file,
-							content: content,
-							matchesName: true, // Consideramos que coincide por el emoji
-							matchesContent: false,
-							isBacklink: false
-						});
-					}
-				} catch (error) {
-					console.error('Error reading file:', file.path, error);
-				}
-			}
-		}
-		// CASO 3: No hay texto ni emoji - mostrar backlinks
-		else {
-			// Búsqueda vacía - mostrar notas que enlazan a la actual
-			const currentTitle = this.app.workspace.getActiveFile()?.basename || '';
-			
-			for (const file of files) {
-				try {
-					const isInPath = allPaths.some(path => file.path.startsWith(path));
-					const isNotCurrent = file.path !== currentPath;
-					
-					if (isInPath && isNotCurrent) {
-						const content = await this.app.vault.cachedRead(file);
-						const hasLink = this.containsLinkToNote(content, currentTitle);
-						
-						if (hasLink) {
-							results.push({
-								file: file,
-								content: content,
-								matchesName: false,
-								matchesContent: false,
-								isBacklink: true
-							});
-						}
-					}
-				} catch (error) {
-					console.error('Error reading file:', file.path, error);
-				}
-			}
-		}
-		
-		// Ordenar resultados: primero los que coinciden en nombre, luego en contenido
-		results.sort((a, b) => {
-			if (a.matchesName && !b.matchesName) return -1;
-			if (!a.matchesName && b.matchesName) return 1;
-			return 0;
-		});
-		
-		this.renderResults(results, list, filter, config);
-		
-		// Actualizar contador con mensajes más descriptivos
-		if (results.length === 0) {
+const performSearch = async (searchText: string, emojiFilter: string = '') => {
+    currentSearchText = searchText;
+    selectedEmoji = emojiFilter;
+    
+    list.innerHTML = '';
+    resultsCounter.textContent = 'Searching...';
+    
+    const filter = this.normalizeText(searchText.trim());
+    const files = this.app.vault.getMarkdownFiles();
+    
+    let results: SearchResult[] = [];
+    
+    // Obtener todos los paths configurados
+    const allPaths = config.configItems
+        ?.filter(item => item && item.path !== undefined && item.path !== null)
+        .map(item => item.path) || [];
+    
+    // CASO 1: Hay texto de búsqueda
+    if (filter) {
+        for (const file of files) {
+            try {
+                // Si no hay paths, incluir todos los archivos excepto el actual
+                const isInPath = allPaths.length === 0 || allPaths.some(path => file.path.startsWith(path));
+                const isNotCurrent = file.path !== currentPath;
+                
+                const fileEmoji = extractEmojiFromFilename(file.basename);
+                const matchesEmoji = !emojiFilter || fileEmoji === emojiFilter;
+                
+                if (isInPath && isNotCurrent && matchesEmoji) {
+                    const content = await this.app.vault.cachedRead(file);
+                    const contentNormalized = this.normalizeText(content);
+                    const fileNameNormalized = this.normalizeText(file.basename);
+                    
+                    const matchesName = fileNameNormalized.includes(filter);
+                    const matchesContent = contentNormalized.includes(filter);
+                    
+                    if (matchesName || matchesContent) {
+                        results.push({
+                            file: file,
+                            content: content,
+                            matchesName: matchesName,
+                            matchesContent: matchesContent,
+                            isBacklink: false
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Error reading file:', file.path, error);
+            }
+        }
+    } 
+    // CASO 2: No hay texto de búsqueda pero HAY filtro de emoji
+    else if (emojiFilter) {
+        for (const file of files) {
+            try {
+                const isInPath = allPaths.length === 0 || allPaths.some(path => file.path.startsWith(path));
+                const isNotCurrent = file.path !== currentPath;
+                
+                const fileEmoji = extractEmojiFromFilename(file.basename);
+                const matchesEmoji = fileEmoji === emojiFilter;
+                
+                if (isInPath && isNotCurrent && matchesEmoji) {
+                    const content = await this.app.vault.cachedRead(file);
+                    
+                    results.push({
+                        file: file,
+                        content: content,
+                        matchesName: true,
+                        matchesContent: false,
+                        isBacklink: false
+                    });
+                }
+            } catch (error) {
+                console.error('Error reading file:', file.path, error);
+            }
+        }
+    }
+    // CASO 3: No hay texto ni emoji - mostrar backlinks
+    else {
+        for (const file of files) {
+            try {
+                const isInPath = allPaths.length === 0 || allPaths.some(path => file.path.startsWith(path));
+                const isNotCurrent = file.path !== currentPath;
+                
+                if (isInPath && isNotCurrent) {
+                    const content = await this.app.vault.cachedRead(file);
+                    const hasLink = this.containsLinkToNote(content, currentTitle);
+                    
+                    if (hasLink) {
+                        results.push({
+                            file: file,
+                            content: content,
+                            matchesName: false,
+                            matchesContent: false,
+                            isBacklink: true
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Error reading file:', file.path, error);
+            }
+        }
+    }
+    
+	// Ordenar resultados según configuración
+	const sortResults = (results: SearchResult[]) => {
+		return results.sort((a, b) => {
+			// Si hay búsqueda, mantener prioridad de coincidencias en nombre
 			if (filter) {
-				resultsCounter.textContent = 'No matches found';
-			} else if (emojiFilter) {
-				resultsCounter.textContent = `No notes with emoji ${emojiFilter}`;
-			} else {
-				resultsCounter.textContent = 'Start typing to search';
+				if (a.matchesName && !b.matchesName) return -1;
+				if (!a.matchesName && b.matchesName) return 1;
 			}
-		} else {
-			if (emojiFilter && !filter) {
-				resultsCounter.textContent = `${results.length} ${results.length === 1 ? 'note' : 'notes'} with emoji ${emojiFilter}`;
-			} else {
-				resultsCounter.textContent = `${results.length} ${results.length === 1 ? 'result' : 'results'}`;
+			
+			// Aplicar orden configurado
+			let comparison = 0;
+			
+			switch(config.sortBy) {
+				case 'name':
+					// Usar ordenamiento natural para nombres
+					comparison = this.naturalCompare(a.file.basename, b.file.basename);
+					break;
+				case 'date':
+					comparison = a.file.stat.mtime - b.file.stat.mtime;
+					break;
+				default:
+					comparison = this.naturalCompare(a.file.basename, b.file.basename);
 			}
-		}
+			
+			// Aplicar orden ascendente o descendente
+			return config.sortOrder === 'asc' ? comparison : -comparison;
+		});
 	};
+
+	results = sortResults(results);
+    
+    this.renderResults(results, list, filter, config);
+    
+    // Actualizar contador
+    if (results.length === 0) {
+        if (filter) {
+            resultsCounter.textContent = 'No matches found';
+        } else if (emojiFilter) {
+            resultsCounter.textContent = `No notes with emoji ${emojiFilter}`;
+        } else {
+            resultsCounter.textContent = 'Start typing to search';
+        }
+    } else {
+        if (emojiFilter && !filter) {
+            resultsCounter.textContent = `${results.length} ${results.length === 1 ? 'note' : 'notes'} with emoji ${emojiFilter}`;
+        } else {
+            resultsCounter.textContent = `${results.length} ${results.length === 1 ? 'result' : 'results'}`;
+        }
+    }
+};
 	
 	input.addEventListener('input', (e) => {
 		const target = e.target as HTMLInputElement;
@@ -431,7 +474,14 @@ async renderDynamicSearch(source: string, container: HTMLElement, ctx: any) {
 		if (this.app.workspace.getActiveFile()?.path === currentPath) {
 			// Recargar emojis y mantener selección si es posible
 			await loadAllEmojis();
-			performSearch(currentSearchText, selectedEmoji);
+			
+			// Solo actualizar la búsqueda si hay texto o emoji seleccionado
+			if (currentSearchText || selectedEmoji) {
+				performSearch(currentSearchText, selectedEmoji);
+			} else {
+				// Si no hay filtros, solo mostrar backlinks
+				performSearch('', '');
+			}
 		}
 	};
 	
@@ -579,82 +629,153 @@ private containsLinkToNote(content: string, noteTitle: string): boolean {
 		return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 	}
 	
-private parseConfig(source: string): BlockConfig {
-	const config: BlockConfig = {};
-	const lines = source.split('\n');
-	
-	let currentItem: Partial<PluginConfigItem> = {};
-	let processingItems = false;
-	
-	lines.forEach(line => {
-		line = line.trim();
-		if (!line) return; // Ignorar líneas vacías
-		
-		// Detectar separador de items
-		if (line === '---') {
-			if (Object.keys(currentItem).length > 0) {
-				// Guardar item actual
-				if (!config.configItems) {
-					config.configItems = [];
-				}
-				config.configItems.push(currentItem as PluginConfigItem);
-				currentItem = {};
-			}
-			processingItems = true;
-			return;
-		}
-		
-		// Parsear key: value
-		const match = line.match(/^(\w+):\s*(.+)$/);
-		if (match) {
-			const key = match[1].trim();
-			const value = match[2].trim();
-			
-			if (!processingItems) {
-				// Propiedades globales (title)
-				if (key === 'title') {
-					config[key] = value;
-				}
-			} else {
-				// Propiedades de items
-				switch(key) {
-					case 'path':
-						currentItem.path = value.endsWith('/') ? value : value + '/';
-						break;
-					case 'nameButton':
-						currentItem.nameButton = value;
-						break;
-					case 'colorButton':
-						currentItem.colorButton = value;
-						break;
-					case 'backgroundButton':
-						currentItem.backgroundButton = value;
-						break;
-					case 'emoji':
-						currentItem.emoji = value;
-						break;
-					case 'pathTemplate':
-						currentItem.pathTemplate = value;
-						break;
-				}
-			}
-		}
-	});
-	
-	// Guardar el último item si existe
-	if (Object.keys(currentItem).length > 0) {
-		if (!config.configItems) {
-			config.configItems = [];
-		}
-		config.configItems.push(currentItem as PluginConfigItem);
-	}
-	
-	// Si no hay items configurados, usar los de settings
-	if (!config.configItems || config.configItems.length === 0) {
-		config.configItems = this.settings.configItems;
-	}
-	
-	return config;
+private parseConfig(source: string, blockPath?: string): BlockConfig {
+    const config: BlockConfig = {};
+    const lines = source.split('\n');
+    
+    let currentItem: Partial<PluginConfigItem> = {};
+    let processingItems = false;
+    
+    lines.forEach(line => {
+        line = line.trim();
+        if (!line) return; // Ignorar líneas vacías
+        
+        // Detectar separador de items
+        if (line === '---') {
+            if (Object.keys(currentItem).length > 0) {
+                // Guardar item actual
+                if (!config.configItems) {
+                    config.configItems = [];
+                }
+                config.configItems.push(currentItem as PluginConfigItem);
+                currentItem = {};
+            }
+            processingItems = true;
+            return;
+        }
+        
+        // Parsear key: value
+        const match = line.match(/^(\w+):\s*(.+)$/);
+        if (match) {
+            const key = match[1].trim();
+            const value = match[2].trim();
+            
+            if (!processingItems) {
+                // Propiedades globales
+                switch(key) {
+                    case 'title':
+                        config[key] = value;
+                        break;
+                    case 'sortBy':
+                        if (value === 'name' || value === 'date') {
+                            config.sortBy = value;
+                        }
+                        break;
+                    case 'sortOrder':
+                        if (value === 'asc' || value === 'desc') {
+                            config.sortOrder = value;
+                        }
+                        break;
+                }
+            } else {
+                // Propiedades de items
+                switch(key) {
+                    case 'path':
+                        // Si el valor es "current", usar la carpeta del bloque actual
+                        if (value.toLowerCase() === 'current') {
+                            // Obtener la carpeta del bloque
+                            if (blockPath) {
+                                const lastSlash = blockPath.lastIndexOf('/');
+                                if (lastSlash > 0) {
+                                    currentItem.path = blockPath.substring(0, lastSlash + 1);
+                                } else {
+                                    currentItem.path = '';
+                                }
+                            } else {
+                                currentItem.path = '';
+                            }
+                            console.log('Path "current" resolved to:', currentItem.path);
+                        } else {
+                            currentItem.path = value.endsWith('/') ? value : value + '/';
+                        }
+                        break;
+                    case 'nameButton':
+                        currentItem.nameButton = value;
+                        break;
+                    case 'colorButton':
+                        currentItem.colorButton = value;
+                        break;
+                    case 'backgroundButton':
+                        currentItem.backgroundButton = value;
+                        break;
+                    case 'emoji':
+                        currentItem.emoji = value;
+                        break;
+                    case 'pathTemplate':
+                        currentItem.pathTemplate = value;
+                        break;
+                }
+            }
+        }
+    });
+    
+    // Guardar el último item si existe
+    if (Object.keys(currentItem).length > 0) {
+        if (!config.configItems) {
+            config.configItems = [];
+        }
+        config.configItems.push(currentItem as PluginConfigItem);
+    }
+    
+    // Si no hay items configurados, usar los de settings
+    if (!config.configItems || config.configItems.length === 0) {
+        config.configItems = this.settings.configItems;
+    }
+    
+    // Valores por defecto para ordenamiento
+    if (!config.sortBy) {
+        config.sortBy = 'name'; // Por defecto ordenar por nombre
+    }
+    if (!config.sortOrder) {
+        config.sortOrder = 'asc'; // Por defecto ascendente
+    }
+    
+    // Procesar paths "current" para items de settings también
+    if (config.configItems && config.configItems.length > 0) {
+        config.configItems = config.configItems.map(item => {
+            if (item && item.path) {
+                if (typeof item.path === 'string' && item.path.toLowerCase() === 'current') {
+                    if (blockPath) {
+                        const lastSlash = blockPath.lastIndexOf('/');
+                        if (lastSlash > 0) {
+                            return {
+                                ...item,
+                                path: blockPath.substring(0, lastSlash + 1)
+                            };
+                        } else {
+                            return {
+                                ...item,
+                                path: ''
+                            };
+                        }
+                    }
+                }
+            }
+            return item;
+        });
+    }
+    
+    console.log('Final config:', {
+        title: config.title,
+        sortBy: config.sortBy,
+        sortOrder: config.sortOrder,
+        items: config.configItems?.map(item => ({
+            name: item.nameButton,
+            path: item.path
+        }))
+    });
+    
+    return config;
 }
 	
 	private showCreateNotePopup(configItem: PluginConfigItem, blockConfig: BlockConfig, onSuccess?: () => void) {
@@ -870,6 +991,57 @@ private async positionCursorAtEnd(leaf: any) {
     }
 }
 
+/**
+ * Comparador natural para ordenar strings que contienen números
+ * Reconoce y ordena correctamente números dentro de textos
+ * 
+ * Ejemplos:
+ * - "1", "2", "10" → 1, 2, 10 (no 1, 10, 2)
+ * - "capítulo 1", "capítulo 2", "capítulo 10" → orden correcto
+ * - "item-1", "item-2", "item-10" → orden correcto
+ * 
+ * @param a - Primer string a comparar
+ * @param b - Segundo string a comparar
+ * @returns Número negativo si a < b, positivo si a > b, 0 si son iguales
+ */
+private naturalCompare(a: string, b: string): number {
+    // Opción 1: Usando localeCompare (recomendada por su simplicidad)
+    // return a.localeCompare(b, undefined, {
+    //     numeric: true,      // Trata los números como números, no como texto
+    //     sensitivity: 'base' // Ignora diferencias entre mayúsculas/minúsculas
+    // });
+    
+    // Opción 2: Implementación manual (más control pero más código)
+    const regex = /(\d+)|(\D+)/g;
+    const aParts = a.match(regex) || [];
+    const bParts = b.match(regex) || [];
+    
+    const maxLength = Math.max(aParts.length, bParts.length);
+    
+    for (let i = 0; i < maxLength; i++) {
+        if (i >= aParts.length) return -1;
+        if (i >= bParts.length) return 1;
+        
+        const aPart = aParts[i];
+        const bPart = bParts[i];
+        
+        const aIsNum = /^\d+$/.test(aPart);
+        const bIsNum = /^\d+$/.test(bPart);
+        
+        if (aIsNum && bIsNum) {
+            const aNum = parseInt(aPart, 10);
+            const bNum = parseInt(bPart, 10);
+            if (aNum !== bNum) return aNum - bNum;
+        } else {
+            const textCompare = aPart.localeCompare(bPart);
+            if (textCompare !== 0) return textCompare;
+        }
+    }
+    
+    return 0;
+    
+}
+
 
 
 // Métodos auxiliares para formato de fecha
@@ -967,6 +1139,8 @@ private processTemplate(template: string, variables: {[key: string]: any}): stri
 	
 	return processed;
 }
+
+
 	
 	onunload() {
 		console.log('Unloading Dynamic Note Creator Plugin');
@@ -1146,12 +1320,17 @@ pathTemplate: templates/note.md, templates/project.md, templates/idea.md
 			
 			new Setting(itemContainer)
 				.setName('Path')
-				.setDesc('Folder where notes will be saved')
+				.setDesc('Folder where notes will be saved. Use "current" to save in the same folder as the block.')
 				.addText(text => text
-					.setPlaceholder('Notes/')
+					.setPlaceholder('Notes/ or "current"')
 					.setValue(item.path)
 					.onChange(async (value) => {
-						this.plugin.settings.configItems[index].path = value.endsWith('/') ? value : value + '/';
+						// Si el valor es "current", guardarlo exactamente así
+						if (value.toLowerCase() === 'current') {
+							this.plugin.settings.configItems[index].path = 'current';
+						} else {
+							this.plugin.settings.configItems[index].path = value.endsWith('/') ? value : value + '/';
+						}
 						await this.plugin.saveSettings();
 					}));
 			
@@ -1227,4 +1406,7 @@ pathTemplate: templates/note.md, templates/project.md, templates/idea.md
 			itemContainer.createEl('hr');
 		});
 	}
+
+
+	
 }
